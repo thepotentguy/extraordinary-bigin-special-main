@@ -347,12 +347,94 @@ function es_enqueue_code_editor($hook_suffix)
 }
 add_action('admin_enqueue_scripts', 'es_enqueue_code_editor');
 
-function es_bigin_form_shortcode()
-{
-    // Get the form code from the admin settings
-    $form_code = get_option('es_form_code', '');
+function es_bigin_form_shortcode( $atts = [] ) {
+    // Default shortcode options
+    $atts = shortcode_atts(
+        array(
+            // Bigin field name that should receive the campaign info
+            'campaign_field'  => 'POTENTIALCF1',      // your "Referring website" field by default
+            // What to send:
+            //  - 'title'      => just the page title
+            //  - 'url'        => just the page URL
+            //  - 'title_url'  => "Title | URL"
+            'campaign_source' => 'title',
+        ),
+        $atts,
+        'bigin_form'
+    );
 
-    // Return the form code
-    return $form_code;
+    // Get the raw Bigin form embed code from the settings page
+    $form_code = get_option( 'es_form_code', '' );
+
+    if ( empty( $form_code ) ) {
+        return ''; // fail silently if no form code is stored
+    }
+
+    // Prepare safe values for JS
+    $field_name      = esc_js( $atts['campaign_field'] );
+    $campaign_source = esc_js( $atts['campaign_source'] );
+
+    // Inline script: inject campaign info into a hidden Bigin field
+    $script = "
+<script>
+(function() {
+    var fieldName = '{$field_name}';
+    var source    = '{$campaign_source}';
+
+    function setCampaignValue() {
+        try {
+            var forms = document.querySelectorAll(\"form[id^='BiginWebToRecordForm']\");
+            if (!forms.length) return;
+
+            var pageTitle = document.title || '';
+            var pageUrl   = window.location.href || '';
+            var value;
+
+            if (source === 'url') {
+                value = pageUrl;
+            } else if (source === 'title_url') {
+                value = pageTitle ? (pageTitle + ' | ' + pageUrl) : pageUrl;
+            } else {
+                // default: title
+                value = pageTitle || pageUrl;
+            }
+
+            forms.forEach(function(form) {
+                // Try to find an existing field
+                var field = form.querySelector(\"input[name='\" + fieldName + \"']\");
+
+                // If not present, create a hidden input
+                if (!field) {
+                    field = document.createElement('input');
+                    field.type  = 'hidden';
+                    field.name  = fieldName;
+                    form.appendChild(field);
+                }
+
+                field.value = value;
+            });
+        } catch (e) {
+            console && console.warn && console.warn('Bigin campaign tagging error:', e);
+        }
+    }
+
+    // Run after DOM is ready and give the Bigin script a moment to render the form
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(setCampaignValue, 500);
+        });
+    } else {
+        setTimeout(setCampaignValue, 500);
+    }
+})();
+</script>";
+
+    // Wrap form for safety/debugging if needed
+    $output  = '<div class=\"es-bigin-form-wrapper\">';
+    $output .= $form_code;
+    $output .= $script;
+    $output .= '</div>';
+
+    return $output;
 }
-add_shortcode('bigin_form', 'es_bigin_form_shortcode');
+add_shortcode( 'bigin_form', 'es_bigin_form_shortcode' );
