@@ -3,7 +3,7 @@
  * Plugin Name: Extraordinary Specials
  * Plugin URI:  https://bigambitions.co.za/
  * Description: Tracked special-offer journeys from WordPress to Bigin and the eRes booking engine.
- * Version:     2.0.0
+ * Version:     2.0.5
  * Author:      Steph & Ash
  * Author URI:  https://bigambitions.co.za/
  * Text Domain: extra-special
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ES_VERSION', '2.0.0' );
+define( 'ES_VERSION', '2.0.5' );
 define( 'ES_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ES_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -43,7 +43,7 @@ function es_get_product_code( $post_id ) {
 }
 
 function es_extract_booking_url( $content ) {
-	if ( preg_match( '#https://nebulacrs\.hti\.app/extraordinary/[^\s"\'<>]+/(?:desktop|mobile)\.html(?:\?[^\s"\'<>#]*)?#i', (string) $content, $matches ) ) {
+	if ( preg_match( '~https://nebulacrs\.hti\.app/extraordinary/[^\s"\'<>]+/(?:desktop|mobile)\.html(?:\?[^\s"\'<>#]*)?~i', (string) $content, $matches ) ) {
 		return esc_url_raw( html_entity_decode( $matches[0] ) );
 	}
 	return '';
