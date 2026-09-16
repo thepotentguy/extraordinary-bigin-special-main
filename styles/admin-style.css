@@ -1,0 +1,3 @@
+#es-gallery-preview { display: flex; flex-wrap: wrap; gap: 12px; }
+.es-gallery-image { position: relative; width: 150px; padding: 8px; border: 1px solid #dcdcde; background: #fff; }
+.es-gallery-image img { display: block; width: 100%; height: 110px; object-fit: cover; margin-bottom: 6px; }

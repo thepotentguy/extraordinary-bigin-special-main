@@ -1,89 +1,154 @@
 <?php
-class SpecialsMetaBox
-{
-    public function __construct()
-    {
-        add_action('add_meta_boxes', array($this, 'add'));
-        add_action('save_post', array($this, 'save'));
-        add_action('admin_enqueue_scripts', array($this, 'enqueueScripts'));
-    }
+/**
+ * Offer editor fields.
+ *
+ * @package Extra_Special
+ */
 
-    public function add()
-    {
-        add_meta_box('specials_meta_box', 'Specials Information', array($this, 'display'), 'exclusive-offers', 'normal', 'high');
-        add_meta_box('hs_specials_images', 'Image Gallery', array($this, 'imagesCallback'), 'exclusive-offers');
-    }
-
-    public function display($special)
-    {
-        wp_nonce_field('hs_specials_nonce', 'hs_specials_nonce_field');
-        $this->createField($special, 'validity_date', 'date');
-        $this->createField($special, 'price', 'number');
-        $this->createField($special, 'packages', 'textarea');
-    }
-
-    private function createField($special, $field, $type)
-    {
-        $value = get_post_meta($special->ID, "_{$field}", true);
-        $label = ucfirst(str_replace('_', ' ', $field));
-        echo "<label for='{$field}'>{$label}</label>";
-        if ($type === 'textarea') {
-            echo "<textarea id='{$field}' name='{$field}' rows='4' cols='50'>{$value}</textarea>";
-        } else {
-            echo "<input type='{$type}' id='{$field}' name='{$field}' value='{$value}' size='25' />";
-        }
-    }
-
-    public function save($post_id)
-    {
-        if (!$this->userCanSave($post_id, 'hs_specials_nonce', 'hs_specials_nonce_field')) {
-            return;
-        }
-        $this->updateField($post_id, 'validity_date');
-        $this->updateField($post_id, 'price');
-        $this->updateField($post_id, 'packages');
-        $this->updateField($post_id, 'image_ids');
-    }
-
-    private function userCanSave($post_id, $nonceAction, $nonceField)
-    {
-        return isset($_POST[$nonceField]) && wp_verify_nonce($_POST[$nonceField], $nonceAction) && current_user_can('edit_post', $post_id);
-    }
-
-    private function updateField($post_id, $field)
-    {
-        if (isset($_POST[$field])) {
-            $value = sanitize_text_field($_POST[$field]);
-            update_post_meta($post_id, "_{$field}", $value);
-        }
-    }
-
-    public function imagesCallback($post)
-    {
-        wp_nonce_field(basename(__FILE__), 'hs_specials_images_nonce');
-        $image_ids = get_post_meta($post->ID, '_image_ids', true);
-        $image_ids = explode(',', $image_ids);
-        $this->createImageGallery($image_ids);
-        echo '<input type="hidden" id="image-ids" name="image_ids" value="' . implode(',', $image_ids) . '">';
-        echo '<button type="button" id="add-gallery-image">Add Image</button>';
-    }
-
-    private function createImageGallery($image_ids)
-    {
-        echo '<div id="image-gallery">';
-        foreach ($image_ids as $image_id) {
-            if (!empty($image_id)) {
-                $image_src = wp_get_attachment_image_src($image_id, 'thumbnail');
-                echo '<div class="gallery-image"><img src="' . $image_src[0] . '"><button class="remove-gallery-image" data-id="' . $image_id . '">Remove</button></div>';
-            }
-        }
-        echo '</div>';
-    }
-    public function enqueueScripts()
-    {
-        wp_enqueue_media();
-        wp_enqueue_script('hs_admin_script', plugins_url('../js/specials.js', __FILE__), array('jquery'), '1.0', true);
-    }
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
 }
 
-new SpecialsMetaBox();
+function es_add_special_meta_boxes() {
+	add_meta_box(
+		'es_offer_details',
+		__( 'Offer and booking details', 'extra-special' ),
+		'es_render_offer_details_meta_box',
+		'exclusive-offers',
+		'normal',
+		'high'
+	);
+
+	add_meta_box(
+		'es_special_gallery',
+		__( 'Offer gallery', 'extra-special' ),
+		'es_render_gallery_meta_box',
+		'exclusive-offers',
+		'normal',
+		'default'
+	);
+}
+add_action( 'add_meta_boxes', 'es_add_special_meta_boxes' );
+
+function es_render_offer_details_meta_box( $post ) {
+	wp_nonce_field( 'es_save_offer_details', 'es_offer_details_nonce' );
+
+	$fields = array(
+		'_validity_date' => array(
+			'label'       => __( 'Valid until', 'extra-special' ),
+			'type'        => 'date',
+			'description' => __( 'The offer is shown as ended after this date.', 'extra-special' ),
+		),
+		'_price'         => array(
+			'label'       => __( 'Display price', 'extra-special' ),
+			'type'        => 'text',
+			'placeholder' => 'R 10,692 per person sharing',
+		),
+		'_packages'      => array(
+			'label'       => __( 'Package summary', 'extra-special' ),
+			'type'        => 'textarea',
+			'placeholder' => __( 'What is included in this offer?', 'extra-special' ),
+		),
+		'_promo_code'    => array(
+			'label'       => __( 'eRes promo code', 'extra-special' ),
+			'type'        => 'text',
+			'placeholder' => 'SUMMER25',
+			'description' => __( 'Added automatically to the eRes booking page. Leave blank when the offer has no promo code.', 'extra-special' ),
+		),
+		'_product_code'  => array(
+			'label'       => __( 'Product code', 'extra-special' ),
+			'type'        => 'text',
+			'placeholder' => 'HAM-SUMMER-2026',
+			'description' => __( 'Use the same stable code in Bigin, website analytics and WhatsApp.', 'extra-special' ),
+		),
+		'_booking_url'   => array(
+			'label'       => __( 'eRes booking URL', 'extra-special' ),
+			'type'        => 'url',
+			'placeholder' => 'https://nebulacrs.hti.app/extraordinary/property/desktop.html?locale=en_US',
+			'description' => __( 'Optional offer-specific URL. The site-wide booking URL is used when this is blank.', 'extra-special' ),
+		),
+	);
+
+	echo '<table class="form-table" role="presentation"><tbody>';
+	foreach ( $fields as $key => $field ) {
+		$value = get_post_meta( $post->ID, $key, true );
+		echo '<tr><th scope="row"><label for="' . esc_attr( $key ) . '">' . esc_html( $field['label'] ) . '</label></th><td>';
+		if ( 'textarea' === $field['type'] ) {
+			echo '<textarea class="large-text" rows="4" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" placeholder="' . esc_attr( $field['placeholder'] ?? '' ) . '">' . esc_textarea( $value ) . '</textarea>';
+		} else {
+			echo '<input class="regular-text" type="' . esc_attr( $field['type'] ) . '" id="' . esc_attr( $key ) . '" name="' . esc_attr( $key ) . '" value="' . esc_attr( $value ) . '" placeholder="' . esc_attr( $field['placeholder'] ?? '' ) . '">';
+		}
+		if ( ! empty( $field['description'] ) ) {
+			echo '<p class="description">' . esc_html( $field['description'] ) . '</p>';
+		}
+		echo '</td></tr>';
+	}
+	echo '</tbody></table>';
+}
+
+function es_render_gallery_meta_box( $post ) {
+	wp_nonce_field( 'es_save_gallery', 'es_gallery_nonce' );
+	$gallery = get_post_meta( $post->ID, '_image_ids', true );
+	$gallery = array_filter( array_map( 'absint', explode( ',', (string) $gallery ) ) );
+	?>
+	<div id="es-gallery-preview">
+		<?php foreach ( $gallery as $attachment_id ) : ?>
+			<?php $thumbnail = wp_get_attachment_image( $attachment_id, 'thumbnail' ); ?>
+			<?php if ( $thumbnail ) : ?>
+				<div class="es-gallery-image" data-id="<?php echo esc_attr( $attachment_id ); ?>">
+					<?php echo wp_kses_post( $thumbnail ); ?>
+					<button type="button" class="button-link-delete es-remove-gallery-image"><?php esc_html_e( 'Remove', 'extra-special' ); ?></button>
+					<input type="hidden" name="gallery[]" value="<?php echo esc_attr( $attachment_id ); ?>">
+				</div>
+			<?php endif; ?>
+		<?php endforeach; ?>
+	</div>
+	<p><button type="button" class="button" id="es-add-gallery-images"><?php esc_html_e( 'Add images', 'extra-special' ); ?></button></p>
+	<?php
+}
+
+function es_save_special_meta_boxes( $post_id ) {
+	if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
+		return;
+	}
+
+	if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		return;
+	}
+
+	if ( isset( $_POST['es_offer_details_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['es_offer_details_nonce'] ) ), 'es_save_offer_details' ) ) {
+		$text_fields = array( '_validity_date', '_price', '_promo_code', '_product_code' );
+		foreach ( $text_fields as $field ) {
+			$value = isset( $_POST[ $field ] ) ? sanitize_text_field( wp_unslash( $_POST[ $field ] ) ) : '';
+			update_post_meta( $post_id, $field, $value );
+		}
+
+		$packages = isset( $_POST['_packages'] ) ? sanitize_textarea_field( wp_unslash( $_POST['_packages'] ) ) : '';
+		update_post_meta( $post_id, '_packages', $packages );
+
+		$booking_url = isset( $_POST['_booking_url'] ) ? esc_url_raw( wp_unslash( $_POST['_booking_url'] ) ) : '';
+		update_post_meta( $post_id, '_booking_url', $booking_url );
+	}
+
+	if ( isset( $_POST['es_gallery_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['es_gallery_nonce'] ) ), 'es_save_gallery' ) ) {
+		$gallery = isset( $_POST['gallery'] ) ? array_filter( array_map( 'absint', (array) wp_unslash( $_POST['gallery'] ) ) ) : array();
+		update_post_meta( $post_id, '_image_ids', implode( ',', array_values( array_unique( $gallery ) ) ) );
+	}
+}
+add_action( 'save_post_exclusive-offers', 'es_save_special_meta_boxes' );
+
+function es_enqueue_offer_admin_assets( $hook ) {
+	if ( ! in_array( $hook, array( 'post.php', 'post-new.php' ), true ) ) {
+		return;
+	}
+
+	$screen = get_current_screen();
+	if ( ! $screen || 'exclusive-offers' !== $screen->post_type ) {
+		return;
+	}
+
+	wp_enqueue_media();
+	wp_enqueue_script( 'es-admin-specials', ES_PLUGIN_URL . 'js/admin-specials.js', array( 'jquery' ), ES_VERSION, true );
+	wp_enqueue_style( 'es-admin-style', ES_PLUGIN_URL . 'styles/admin-style.css', array(), ES_VERSION );
+}
+add_action( 'admin_enqueue_scripts', 'es_enqueue_offer_admin_assets' );
