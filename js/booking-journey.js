@@ -43,7 +43,18 @@
       form.appendChild(field);
     }
     field.value = String(value);
+    field.defaultValue = String(value);
+    field.setAttribute('value', String(value));
+    field.dataset.esValue = String(value);
     field.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function restoreTrackedFields(form) {
+    form.querySelectorAll('[data-es-value]').forEach(function (field) {
+      field.value = field.dataset.esValue || '';
+      field.defaultValue = field.dataset.esValue || '';
+      field.setAttribute('value', field.dataset.esValue || '');
+    });
   }
 
   function ensureVisibleField(form, name, label, type, attributes) {
@@ -70,13 +81,16 @@
     row.appendChild(labelElement);
     row.appendChild(fieldWrapper);
 
-    var submitRow = form.querySelector('.wform-btn-wrap');
-    form.querySelector('.wf-form-wrapper, [id^="elementDiv"]')?.insertBefore(row, submitRow || null);
+    var submitRow = form.querySelector('.wf-btn-row');
+    if (!submitRow) {
+      var submitWrapper = form.querySelector('.wform-btn-wrap');
+      submitRow = submitWrapper ? submitWrapper.closest('.wf-row') : null;
+    }
+    var rowsParent = submitRow && submitRow.parentNode ? submitRow.parentNode : form;
+    rowsParent.insertBefore(row, submitRow || null);
   }
 
-  function populateForm(form) {
-    if (!form || form.dataset.esJourneyReady === 'true') return;
-
+  function applyFormValues(form) {
     setField(form, fields.property, config.propertyName || '');
     setField(form, fields.referrer, window.location.href);
     setField(form, fields.offer, config.offerName || document.title);
@@ -88,25 +102,36 @@
     setField(form, fields.utmCampaign, firstTouch.utm_campaign || params.get('utm_campaign') || '');
     setField(form, fields.channel, 'Website');
     setField(form, fields.submissionId, submissionId);
-	setField(form, fields.metaClickId, firstTouch.fbclid || params.get('fbclid') || '');
+    setField(form, fields.metaClickId, firstTouch.fbclid || params.get('fbclid') || '');
     setField(form, fields.googleClickId, firstTouch.gclid || params.get('gclid') || '');
+  }
+
+  function populateForm(form) {
+    if (!form || form.dataset.esJourneyReady === 'true') return;
 
     ensureVisibleField(form, fields.checkoutDate, 'Check-out date', 'date');
     ensureVisibleField(form, fields.numberRooms, 'Number of rooms', 'number', { min: '1', max: '20', value: '1' });
+    applyFormValues(form);
 
     [fields.property, fields.referrer, fields.offer, fields.productCode, fields.promoCode,
       fields.landingUrl, fields.utmSource, fields.utmMedium, fields.utmCampaign,
-	  fields.channel, fields.submissionId, fields.metaClickId, fields.googleClickId].filter(Boolean).forEach(function (name) {
+      fields.channel, fields.submissionId, fields.metaClickId, fields.googleClickId].filter(Boolean).forEach(function (name) {
       var input = form.querySelector('[name="' + CSS.escape(name) + '"]');
       var container = input && input.closest('.wf-row, .wf-field');
       if (container) container.hidden = true;
     });
 
     form.addEventListener('submit', function () {
+      restoreTrackedFields(form);
       pushEvent('generate_lead', { method: 'Bigin form' });
-    }, { once: true });
+    }, { capture: true });
 
     form.dataset.esJourneyReady = 'true';
+
+    // Bigin's legacy embed initializes after the saved form markup and can reset
+    // appended values. Reapply attribution after that initialization settles.
+    window.setTimeout(function () { applyFormValues(form); }, 500);
+    window.setTimeout(function () { applyFormValues(form); }, 2000);
   }
 
   function populateForms() {
